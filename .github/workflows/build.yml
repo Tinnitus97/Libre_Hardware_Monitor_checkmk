@@ -1,0 +1,89 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      lhm_ref:
+        description: 'LibreHardwareMonitor branch, tag or commit'
+        default: 'master'
+  schedule:
+    # weekly build against the current LibreHardwareMonitor master
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: write   # needed to create a release when a v* tag is pushed
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build (LibreHardwareMonitor from source)
+        shell: pwsh
+        run: .\build.ps1 -Ref '${{ github.event.inputs.lhm_ref || 'master' }}'
+
+      - name: Smoke test (help / version)
+        shell: pwsh
+        run: |
+          .\dist\OpenHardwareMonitorCLI.exe --help
+          .\dist\OpenHardwareMonitorCLI.exe --version
+
+      - name: Smoke test (dump, runner is admin)
+        shell: pwsh
+        run: .\dist\OpenHardwareMonitorCLI.exe --dump --header
+
+      - name: Smoke test (WMI provider, same query as the Checkmk agent)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'ohmcli.log'
+          $p = Start-Process .\dist\OpenHardwareMonitorCLI.exe -ArgumentList '--duration=25', '--verbose', "--log=$log" -PassThru -NoNewWindow
+          Start-Sleep -Seconds 15
+          # exactly the query the Checkmk Windows agent sends (agents/wnx/src/engine/providers/wmi.cpp)
+          $sensors = Get-CimInstance -Namespace 'root/OpenHardwareMonitor' -Query 'SELECT Index,Name,Parent,SensorType,Value FROM Sensor' -ErrorAction SilentlyContinue
+          $sensors | Select-Object Index, Name, Parent, SensorType, Value | Format-Table -AutoSize | Out-String -Width 200
+          $p | Wait-Process -Timeout 60
+          Get-Content $log
+          if (-not $sensors) { throw 'No sensors found in WMI namespace root/OpenHardwareMonitor' }
+
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}' } else { 'dev-' + '${{ github.sha }}'.Substring(0, 7) }
+          $pkg = Join-Path $env:RUNNER_TEMP 'package'
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+          Copy-Item dist\* $pkg
+          Copy-Item tools\install-checkmk.ps1, README.md, LICENSE $pkg
+          $zip = Join-Path $env:RUNNER_TEMP "OpenHardwareMonitorCLI-LHM-$version.zip"
+          Compress-Archive -Path "$pkg\*" -DestinationPath $zip -Force
+          "zip=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "pkg=$pkg" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenHardwareMonitorCLI-LHM
+          path: ${{ steps.package.outputs.pkg }}
+
+      - name: Create GitHub release (on v* tags)
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @(
+            'Drop-in replacement for the Checkmk OpenHardwareMonitorCLI.exe, based on LibreHardwareMonitor.',
+            '',
+            'Copy `OpenHardwareMonitorCLI.exe` and `OpenHardwareMonitorLib.dll` to the Checkmk agent (bakery: `local/share/check_mk/agents/windows/`, or `C:\ProgramData\checkmk\agent\bin`) or run `install-checkmk.ps1`. Requires .NET Framework 4.7.2 and the PawnIO driver (`winget install namazso.PawnIO`).',
+            '',
+            '```',
+            (Get-Content dist\BUILD-INFO.txt -Raw),
+            '```'
+          ) -join "`n"
+          gh release create '${{ github.ref_name }}' '${{ steps.package.outputs.zip }}' --title '${{ github.ref_name }}' --notes $notes

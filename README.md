@@ -9,6 +9,9 @@
 > service names stay. Requires Windows x64, .NET Framework 4.7.2 and PawnIO (`winget install namazso.PawnIO`).
 > Prebuilt files: see [Releases](../../releases) or the artifacts of the [build workflow](../../actions).
 > Related idea: [Replace Open Hardware Monitor with LibreHardwareMonitor](https://ideas.checkmk.com/suggestions/535894/replace-open-hardware-monitor-with-librehardwaremonitor).
+>
+> **Checkmk team: you are explicitly welcome to use this code to bring LibreHardwareMonitor support back into
+> Checkmk officially** – see [For the Checkmk team](#for-the-checkmk-team).
 
 Ein headless Ersatz für die `OpenHardwareMonitorCLI.exe`, die Checkmk für die Sektion
 `<<<openhardwaremonitor>>>` benutzt. Statt des toten OpenHardwareMonitor (mit dem als
@@ -246,6 +249,47 @@ tools/install-checkmk.ps1           Installation in einen lokalen Checkmk-Agente
 .github/workflows/build.yml         CI-Build inkl. WMI-Test
 ```
 
+## For the Checkmk team
+
+**You are explicitly welcome to use this code – completely or in parts – to bring LibreHardwareMonitor support
+back into the Checkmk Windows agent as an official component.** That is the goal of this project. Feedback,
+questions or a short mention are appreciated but not required.
+
+### Licensing
+
+- This repository is licensed under the [Mozilla Public License 2.0](LICENSE), like LibreHardwareMonitor and the
+  original Open Hardware Monitor. MPL-2.0 is compatible with the GPLv2 of the Checkmk agent (MPL-2.0 section 3.3,
+  "Secondary Licenses") and allows use in commercial products; only the source of MPL-licensed files has to remain
+  available.
+- **In addition**, the author of this repository grants Checkmk GmbH the permission to use, modify and distribute
+  the code written for this repository under the GNU General Public License v2 or under any other license that
+  Checkmk GmbH uses for its products, without further conditions.
+- LibreHardwareMonitor itself and its dependencies (HidSharp, DiskInfoToolkit, RAMSPDToolkit, …) keep their own
+  licenses; the additional permission above covers only the code of this repository.
+
+### Integration notes
+
+- **No changes are needed** in the Windows agent (section `openhardwaremonitor`, process start from `bin\`,
+  WMI query `SELECT Index,Name,Parent,SensorType,Value FROM Sensor`), in the bakery plugin
+  `win_openhardwaremonitor` (same two files) or in the check plugins.
+- All OHM compatibility adjustments are in one place: [`src/IdentifierMapper.cs`](src/IdentifierMapper.cs)
+  (identifier mapping, GB conversion for `Data`, `Remaining Life`, filtering of constant limit values,
+  fans only after the first rotation, separator and NaN sanitizing).
+- Reproducible builds: `build.ps1 -Ref <commit>` pins a LibreHardwareMonitor commit; `build.ps1 -FromNuGet` uses
+  the NuGet release. The [workflow](.github/workflows/build.yml) shows the build and smoke test on `windows-latest`,
+  including the exact WMI query of the agent.
+- Runtime requirements: Windows x64, .NET Framework 4.7.2, and the signed
+  [PawnIO](https://pawnio.eu) driver (installed separately, e.g. `winget install namazso.PawnIO`) for CPU, mainboard
+  and DIMM sensors. It could be offered as an optional dependency of the agent package.
+- Findings in the current check plugins while testing (`cmk/plugins/openhardwaremonitor`):
+  - The parser calls `float(value)` without error handling. The agent formats NaN as `-nan(ind)`
+    (`std::to_wstring`), so a single invalid value from any provider makes the whole section fail.
+    This CLI avoids it, but the parser could also skip such lines.
+  - The default temperature levels (`cpu` 60/70 °C, `hdd` 40/50 °C) are low for current hardware
+    (AMD Tctl, NVMe SSDs) and lead to CRIT states after the first discovery.
+
 ## Lizenz
 
 Mozilla Public License 2.0 – wie LibreHardwareMonitor und OpenHardwareMonitor.
+Zusätzlich darf die Checkmk GmbH den Code dieses Repositorys unter der GPLv2 oder jeder anderen für ihre Produkte
+verwendeten Lizenz nutzen (siehe [For the Checkmk team](#for-the-checkmk-team)).

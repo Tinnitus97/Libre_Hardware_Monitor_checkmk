@@ -129,8 +129,9 @@ gegen den aktuellen LibreHardwareMonitor-master, testet `--dump` und die echte W
 als Artefakt `OpenHardwareMonitorCLI-LHM` bereit. Er läuft bei jedem Push und zusätzlich jeden Montag; über
 „Run workflow“ lässt sich ein bestimmter LibreHardwareMonitor-Ref bauen (auch in einem Fork).
 
-**Release erstellen:** Ein Tag `v*` pushen (z. B. `git tag v1.1.0 && git push origin v1.1.0`). Der Workflow baut,
-testet und legt ein GitHub-Release mit der ZIP an.
+**Release erstellen:** Entweder ein Tag `v*` pushen (z. B. `git tag v1.1.0 && git push origin v1.1.0`) oder auf
+GitHub unter *Releases → Draft a new release* ein neues Tag `v…` anlegen und veröffentlichen. Der Workflow baut,
+testet und hängt die ZIP an das Release an.
 
 ## Installation
 

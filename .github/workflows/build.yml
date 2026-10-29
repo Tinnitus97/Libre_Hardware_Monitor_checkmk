@@ -8,6 +8,9 @@ on:
       lhm_ref:
         description: 'LibreHardwareMonitor branch, tag or commit'
         default: 'master'
+  release:
+    # a release created on the GitHub web page gets the built ZIP attached
+    types: [published]
   schedule:
     # weekly build against the current LibreHardwareMonitor master
     - cron: '17 4 * * 1'
@@ -71,7 +74,7 @@ jobs:
           name: OpenHardwareMonitorCLI-LHM
           path: ${{ steps.package.outputs.pkg }}
 
-      - name: Create GitHub release (on v* tags)
+      - name: Create GitHub release / attach ZIP (on v* tags)
         if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
         shell: pwsh
         env:
@@ -86,4 +89,11 @@ jobs:
             (Get-Content dist\BUILD-INFO.txt -Raw),
             '```'
           ) -join "`n"
-          gh release create '${{ github.ref_name }}' '${{ steps.package.outputs.zip }}' --title '${{ github.ref_name }}' --notes $notes
+          $tag = '${{ github.ref_name }}'
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            # release already exists (created on the web page or by a parallel run): attach/replace the ZIP
+            gh release upload $tag '${{ steps.package.outputs.zip }}' --clobber
+          } else {
+            gh release create $tag '${{ steps.package.outputs.zip }}' --title $tag --notes $notes
+          }

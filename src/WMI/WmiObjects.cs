@@ -1,6 +1,10 @@
 // This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
 // If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
+// Based on the WMI classes (WMI/Hardware.cs, WMI/Sensor.cs, WMI/IWmiObject.cs) of Open Hardware Monitor
+// (https://github.com/openhardwaremonitor/openhardwaremonitor):
+// Copyright (C) 2009-2010 Paul Werelds <paul@werelds.net>
+//
 // WMI classes published in root\OpenHardwareMonitor.
 // Class names, property names and property types are identical to the original
 // OpenHardwareMonitorCLI.exe so the Checkmk agent and existing WMI consumers keep working.
